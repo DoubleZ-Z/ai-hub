@@ -1,9 +1,14 @@
 import React, {useEffect, useRef, useState} from "react";
-import {chatInteractive, historyMessageList} from "../../api/chatApi";
+import {chatInteractive, historyMessageList, newChatCreate} from "../../api/chatApi";
 import {Avatar, Button, Input, Layout, List, message} from 'antd';
 import {Content, Footer} from "antd/es/layout/layout";
 import {ArrowRightOutlined, MinusCircleOutlined, RobotOutlined, UserOutlined} from "@ant-design/icons";
+import Rabbit from '../../image/rabbit.svg'
 import './ChatContent.less'
+import ReactMarkdown from 'react-markdown';
+import rehypeHighlight from 'rehype-highlight';
+import 'highlight.js/styles/github-dark.css';
+import type { Components } from 'react-markdown';
 
 interface MessageItem {
     id: string;
@@ -14,10 +19,11 @@ interface MessageItem {
 }
 
 interface Prop {
-    sessionId: string
+    sessionId: string,
+    onSessionChange: (sessionId: string) => void,
 }
 
-const ChatContent: React.FC<Prop> = ({sessionId}) => {
+const ChatContent: React.FC<Prop> = ({sessionId, onSessionChange}) => {
 
     const [messages, setMessages] = useState<MessageItem[]>([]);
     const [input, setInput] = useState('');
@@ -30,10 +36,9 @@ const ChatContent: React.FC<Prop> = ({sessionId}) => {
             eventSourceRef.current?.close();
         };
     }, []);
-
     useEffect(() => {
-        if (sessionId) {
-            setLoading(true);  // 添加加载状态
+        if (sessionId && !loading) {
+            setLoading(true);
             historyMessageList(sessionId)
                 .then(res => {
                     const formattedMessages = res.map(msg => ({
@@ -89,9 +94,27 @@ const ChatContent: React.FC<Prop> = ({sessionId}) => {
     // 处理提交
     const handleSubmit = async () => {
         if (!input.trim() || loading) return;
+        setLoading(true);
+        let chatId: string = sessionId;
+        if (!chatId || chatId === 'new') {
+            newChatCreate(input).then(res => {
+                chatId = res.sessionId;
+                onSessionChange(chatId)
+                aiChat(chatId, input);
+            }).catch(err => {
+                setLoading(false)
+                return
+            });
+        } else {
+            await aiChat(chatId, input);
+        }
+    };
 
+    const aiChat = async (sessionId: string, input: string) => {
         try {
-            setLoading(true);
+            if (sessionId === 'new') {
+                return
+            }
             const userInput = input;
             setInput('');
 
@@ -101,7 +124,7 @@ const ChatContent: React.FC<Prop> = ({sessionId}) => {
             addMessage('', false, true);
 
             // 初始化 EventSource
-            eventSourceRef.current = chatInteractive(userInput);
+            eventSourceRef.current = chatInteractive(userInput, sessionId);
             const reader = eventSourceRef.current.stream.getReader();
 
             // 处理流数据
@@ -112,14 +135,14 @@ const ChatContent: React.FC<Prop> = ({sessionId}) => {
                 scrollToBottom();
             }
         } catch (err) {
-            message.error('请求失败，请重试');
+            message.error('请求失败，请重试').then();
             setMessages(prev => prev.slice(0, -1));
         } finally {
             setLoading(false);
+            setInput('')
             eventSourceRef.current?.close();
         }
-    };
-
+    }
 
     // 停止生成
     const handleStop = () => {
@@ -132,14 +155,50 @@ const ChatContent: React.FC<Prop> = ({sessionId}) => {
         scrollToBottom();
     }, [messages]);
 
+    const MarkdownRenderer = ({ content }: { content: string }) => {
+        const components: Components = {
+            code({ node, className, children, ...props }) {
+                // 通过父元素判断是否是行内代码
+                const isInline = !node?.position?.start.column;
+
+                if (isInline) {
+                    return <code className={className} {...props}>{children}</code>;
+                }
+
+                return (
+                    <pre className="code-block">
+          <code className={className} {...props}>
+            {children}
+          </code>
+        </pre>
+                );
+            },
+        };
+
+        return (
+            <ReactMarkdown
+                rehypePlugins={[rehypeHighlight]}
+                components={components}
+            >
+                {content}
+            </ReactMarkdown>
+        );
+    };
+
     return (
         <Layout className="chat-layout">
-            <Content className="chat-content">
-                {sessionId === 'new' ? <div className="new-chat">
-
-                </div> : <List
+            {sessionId === 'new' ? <div className="new-chat">
+                <div className='chat-header'>
+                    <img src={Rabbit} alt='rabbit'/>
+                    <span style={{marginLeft: '12px'}}>我是磐石电气(MonolithIot)的助手，很高兴见到你！</span>
+                </div>
+                <div className="chat-tip">
+                    我可以帮你处理磐石电气相关的运维问题、写代码、写作各种创意内容，请把你的问题交给我吧~
+                </div>
+            </div> : <Content className="chat-content">
+                <List
                     dataSource={messages}
-                    locale={{ emptyText: '暂无对话历史' }}
+                    locale={{emptyText: '暂无对话历史'}}
                     renderItem={(item) => (
                         <div className={`message-item ${item.isUser ? 'user' : 'ai'}`}>
                             <div className="message-avatar">
@@ -157,18 +216,22 @@ const ChatContent: React.FC<Prop> = ({sessionId}) => {
                                         <div className="dot"/>
                                     </div>
                                 ) : (
-                                    <div className="message-content">{item.content}</div>
+                                    <div className="message-content">
+                                        <MarkdownRenderer content={item.content}/>
+                                    </div>
                                 )}
                             </div>
                         </div>
                     )}
-                />}
+                />
                 <div ref={messagesEndRef}/>
-            </Content>
+            </Content>}
+
 
             <Footer className="chat-footer">
                 <div className="input-container">
                     <Input.TextArea
+                        value={input}
                         style={{
                             backgroundColor: 'transparent',
                             border: 'none',

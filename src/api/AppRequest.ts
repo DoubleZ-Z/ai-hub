@@ -75,6 +75,7 @@ export const createVisibleAxios = (): Axios => {
     })
     visibleAxios.interceptors.response.use(resp => {
         const appResponse = resp as AppAxiosResponse;
+        console.log(appResponse)
         closeLoading(appResponse._source?.config as VisibleAxiosRequestConfig, true)
         return resp
     }, async err => {
