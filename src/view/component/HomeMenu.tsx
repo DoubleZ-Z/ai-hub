@@ -1,7 +1,7 @@
 import React, {useEffect, useState} from "react";
 import {apiMenuDelete, apiMenuList} from "../../api/menuApi";
 import './HomeMenu.less'
-import {ConfigProvider, Menu, MenuProps, theme} from "antd";
+import {Menu, MenuProps} from "antd";
 import {CloseOutlined, MenuFoldOutlined, MenuUnfoldOutlined, WechatWorkOutlined} from "@ant-design/icons";
 import {MenuInfo} from "../../dto/menu.define";
 import {NotificationUtil} from "../../util/NotificationUtil";
@@ -50,12 +50,12 @@ const HomeMenu: React.FC<Prop> = ({sessionId, onTitleSelect, onCollapsedChange})
 
     useEffect(() => {
         let length = menuItems.filter(item => item.key === sessionId).length;
-        if (length === 0){
+        if (length === 0) {
             apiMenuList().then(res => {
                 convertMenuItems(res);
                 setSelectKey([sessionId])
             }).catch(err => console.error(err));
-        }else {
+        } else {
             setSelectKey([sessionId])
         }
     }, [sessionId]);
